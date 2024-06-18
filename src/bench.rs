@@ -6,6 +6,7 @@ pub struct Bench {
     pub(crate) id: String,
     pub(crate) throughput: Throughput,
     pub(crate) elapsed_time: Duration,
+    pub(crate) params: Vec<String>,
 }
 
 impl Display for Bench {
