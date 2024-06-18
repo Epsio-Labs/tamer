@@ -9,6 +9,7 @@ pub struct Group {
     output_dir: Option<PathBuf>,
     parameters_names: Vec<String>,
     benches: Vec<Bench>,
+    did_report: bool,
 }
 
 impl Group {
@@ -18,6 +19,7 @@ impl Group {
             output_dir,
             parameters_names: vec![],
             benches: Vec::new(),
+            did_report: false,
         }
     }
 
@@ -51,7 +53,10 @@ impl Group {
         self.benches.push(bench);
     }
 
-    pub fn report(&self) {
+    pub fn report(&mut self) {
+        if self.did_report {
+            return;
+        }
         if let Some(p) = &self.output_dir {
             let output_dir = p.join("bench").join(self.name.clone());
             let output_path = output_dir.join("report.csv");
@@ -79,6 +84,7 @@ impl Group {
                     .unwrap();
             }
             writer.flush().unwrap();
+            self.did_report = true;
         } else {
             println!("CARGO_TARGET_DIR not set, skipping report writing");
         }
@@ -89,15 +95,4 @@ impl Drop for Group {
     fn drop(&mut self) {
         self.report();
     }
-}
-
-#[macro_export]
-macro_rules! expr_to_strings {
-    ( $( $expr:expr ),* $(,)? ) => {
-        vec![
-            $(
-                format!("{}", $expr)
-            ),*
-        ]
-    };
 }

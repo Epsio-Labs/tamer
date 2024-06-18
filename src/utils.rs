@@ -20,3 +20,14 @@ pub fn cargo_target_directory() -> Option<PathBuf> {
             Some(metadata.target_directory)
         })
 }
+
+#[macro_export]
+macro_rules! expr_to_strings {
+    ( $( $expr:expr ),* $(,)? ) => {
+        vec![
+            $(
+                format!("{}", $expr)
+            ),*
+        ]
+    };
+}
