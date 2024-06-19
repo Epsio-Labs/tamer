@@ -106,10 +106,11 @@ impl Group {
             if !filter.filter_matches(&format!("{}/{}", self.name, bencher.id)) {
                 continue;
             }
+            println!("\t{}:", bencher.id);
             let bench = (bencher.benchmark_function)();
             let bench_display = format!("{}", bench);
-            let bench_display = bench_display.replace("\n", "\n\t");
-            println!("\t{}", bench_display);
+            let bench_display = bench_display.replace("\n", "\n\t\t");
+            println!("\t\t{}", bench_display);
             self.benches.push(bench);
         }
     }
