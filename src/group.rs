@@ -101,11 +101,12 @@ impl Group {
 
     pub(crate) fn benchmark(&mut self, filter: &BenchmarkFilter) {
         let benchers = std::mem::replace(&mut self.benchers, Vec::new());
+        let filtered_benchers: Vec<_> = benchers.into_iter().filter(|b| filter.filter_matches(&format!("{}/{}", self.name, b.id))).collect();
+        if filtered_benchers.is_empty() {
+            return;
+        }
         println!("Running group {}:", self.name);
-        for bencher in benchers {
-            if !filter.filter_matches(&format!("{}/{}", self.name, bencher.id)) {
-                continue;
-            }
+        for bencher in filtered_benchers {
             println!("\t{}:", bencher.id);
             let bench = (bencher.benchmark_function)();
             let bench_display = format!("{}", bench);
