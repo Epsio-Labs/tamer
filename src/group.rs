@@ -33,13 +33,14 @@ impl Group {
         self
     }
 
-    pub fn async_bench_function<O, R: Future<Output = O>, F: FnOnce() -> R + 'static>(
+    pub fn async_bench<O, R: Future<Output = O>, F: FnOnce() -> R + 'static>(
         &mut self,
-        id: String,
+        id: &str,
         throughput: Throughput,
         params: Vec<String>,
         f: F,
     ) {
+        let id = id.to_string();
         assert_eq!(params.len(), self.parameters_names.len());
         let bencher = Bencher {
             id: id.clone(),
@@ -49,6 +50,40 @@ impl Group {
                 let bench = runner.block_on(async {
                     let start = std::time::Instant::now();
                     let r = f().await;
+                    drop(r); // include drop time in the benchmark
+                    let elapsed_time = start.elapsed();
+                    Bench {
+                        id,
+                        throughput,
+                        elapsed_time,
+                        params,
+                    }
+                });
+                bench
+            }),
+        };
+        self.benchers.push(bencher);
+    }
+
+    pub fn async_bench_with_input<I, FI: FnOnce() -> I + 'static, O, R: Future<Output = O>, F: FnOnce(I) -> R + 'static>(
+        &mut self,
+        id: &str,
+        input_function: FI,
+        throughput: Throughput,
+        params: Vec<String>,
+        f: F,
+    ) {
+        let id = id.to_string();
+        assert_eq!(params.len(), self.parameters_names.len());
+        let bencher = Bencher {
+            id: id.clone(),
+            benchmark_function: Box::new(move || {
+                let input = (input_function)();
+                let runner = Runtime::new().unwrap();
+
+                let bench = runner.block_on(async {
+                    let start = std::time::Instant::now();
+                    let r = f(input).await;
                     drop(r); // include drop time in the benchmark
                     let elapsed_time = start.elapsed();
                     Bench {
