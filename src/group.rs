@@ -1,5 +1,6 @@
 use std::future::Future;
 use std::path::PathBuf;
+use chrono::Utc;
 use crate::bench::Bench;
 use crate::throughput::Throughput;
 use tokio::runtime::Runtime;
@@ -13,7 +14,8 @@ pub struct Group {
 }
 
 impl Group {
-    pub(crate) fn new(name: String, output_dir: Option<PathBuf>) -> Group {
+    pub(crate) fn new(name: String, mut output_dir: Option<PathBuf>) -> Group {
+        output_dir = output_dir.map(|p| p.join(&name));
         Group {
             name,
             output_dir,
@@ -58,10 +60,11 @@ impl Group {
             return;
         }
         if let Some(p) = &self.output_dir {
-            let output_dir = p.join("bench").join(self.name.clone());
-            let output_path = output_dir.join("report.csv");
+            let formatted_datetime = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
+            let filename = format!("report_{}.csv", formatted_datetime);
+            let output_path = p.join(filename);
             println!("Writing report to {:?}", output_path);
-            std::fs::create_dir_all(&output_dir).unwrap();
+            std::fs::create_dir_all(p).unwrap();
             let mut writer = csv::Writer::from_path(output_path).unwrap();
 
             let mut headers = vec!["id".to_string(), "duration(ms)".to_string(), "throughput".to_string()];

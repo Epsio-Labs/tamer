@@ -8,7 +8,8 @@ pub struct Tamer {
 }
 
 impl Tamer {
-    pub fn new(output_dir: Option<PathBuf>) -> Tamer {
+    pub fn new(mut output_dir: Option<PathBuf>) -> Tamer {
+        output_dir = output_dir.map(|a| a.join("tamer"));
         Tamer {
             groups: Vec::new(),
             output_dir
@@ -23,6 +24,6 @@ impl Tamer {
 
 impl Default for Tamer {
     fn default() -> Self {
-        Tamer { groups: Vec::new(), output_dir: cargo_target_directory() }
+        Tamer::new(cargo_target_directory())
     }
 }
