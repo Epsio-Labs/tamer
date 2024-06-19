@@ -9,6 +9,11 @@ pub struct Bench {
     pub(crate) params: Vec<String>,
 }
 
+pub(crate) struct Bencher {
+    pub(crate) id: String,
+    pub(crate) benchmark_function: Box<dyn FnOnce() -> Bench>
+}
+
 impl Display for Bench {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(

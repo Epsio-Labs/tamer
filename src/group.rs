@@ -1,14 +1,16 @@
 use std::future::Future;
 use std::path::PathBuf;
 use chrono::Utc;
-use crate::bench::Bench;
+use crate::bench::{Bench, Bencher};
 use crate::throughput::Throughput;
 use tokio::runtime::Runtime;
+use crate::tamer::BenchmarkFilter;
 
 pub struct Group {
-    name: String,
+    pub(crate) name: String,
     output_dir: Option<PathBuf>,
     parameters_names: Vec<String>,
+    benchers: Vec<Bencher>,
     benches: Vec<Bench>,
     did_report: bool,
 }
@@ -20,16 +22,18 @@ impl Group {
             name,
             output_dir,
             parameters_names: vec![],
+            benchers: Vec::new(),
             benches: Vec::new(),
             did_report: false,
         }
     }
 
-    pub fn with_parameters(&mut self, parameters_names: Vec<String>) {
+    pub fn with_parameters(&mut self, parameters_names: Vec<String>) -> &mut Self {
         self.parameters_names = parameters_names;
+        self
     }
 
-    pub fn async_bench_function<O, R: Future<Output = O>, F: FnOnce() -> R>(
+    pub fn async_bench_function<O, R: Future<Output = O>, F: FnOnce() -> R + 'static>(
         &mut self,
         id: String,
         throughput: Throughput,
@@ -37,26 +41,46 @@ impl Group {
         f: F,
     ) {
         assert_eq!(params.len(), self.parameters_names.len());
-        let runner = Runtime::new().unwrap();
+        let bencher = Bencher {
+            id: id.clone(),
+            benchmark_function: Box::new(move || {
+                let runner = Runtime::new().unwrap();
 
-        let bench = runner.block_on(async {
-            let start = std::time::Instant::now();
-            let r = f().await;
-            drop(r); // include drop time in the benchmark
-            let elapsed_time = start.elapsed();
-            Bench {
-                id,
-                throughput,
-                elapsed_time,
-                params,
+                let bench = runner.block_on(async {
+                    let start = std::time::Instant::now();
+                    let r = f().await;
+                    drop(r); // include drop time in the benchmark
+                    let elapsed_time = start.elapsed();
+                    Bench {
+                        id,
+                        throughput,
+                        elapsed_time,
+                        params,
+                    }
+                });
+                bench
+            }),
+        };
+        self.benchers.push(bencher);
+    }
+
+    pub(crate) fn benchmark(&mut self, filter: &BenchmarkFilter) {
+        let benchers = std::mem::replace(&mut self.benchers, Vec::new());
+        println!("Running group {}:", self.name);
+        for bencher in benchers {
+            if !filter.filter_matches(&format!("{}/{}", self.name, bencher.id)) {
+                continue;
             }
-        });
-        println!("{}", bench);
-        self.benches.push(bench);
+            let bench = (bencher.benchmark_function)();
+            let bench_display = format!("{}", bench);
+            let bench_display = bench_display.replace("\n", "\n\t");
+            println!("\t{}", bench_display);
+            self.benches.push(bench);
+        }
     }
 
     pub fn report(&mut self) {
-        if self.did_report {
+        if self.did_report || self.benches.is_empty() {
             return;
         }
         if let Some(p) = &self.output_dir {
