@@ -1,5 +1,6 @@
 use std::fmt::{Display, Formatter};
 use std::time::Duration;
+use crate::measurement::DurationFormatter;
 
 pub enum Throughput {
     Elements(u64),
@@ -18,12 +19,10 @@ impl Throughput {
         }
     }
 
-    pub fn per_second(&self, duration: Duration) -> f64 {
-        self.value() as f64 / duration.as_secs_f64()
-    }
-
     pub fn per_second_string(&self, duration: Duration) -> String {
-        format!("{:.2} {}/s", self.per_second(duration), self.units())
+        match self {
+            Throughput::Elements(e) => DurationFormatter::elements_per_second(*e as f64, duration),
+        }
     }
 }
 
