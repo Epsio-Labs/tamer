@@ -2,6 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::time::Duration;
 use crate::measurement::DurationFormatter;
 
+#[derive(Clone, Debug)]
 pub enum Throughput {
     Elements(u64),
 }

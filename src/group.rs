@@ -1,17 +1,18 @@
 use std::future::Future;
 use std::path::PathBuf;
+use std::time::Duration;
 use chrono::Utc;
-use crate::bench::{Bench, Bencher};
-use crate::throughput::Throughput;
-use tokio::runtime::Runtime;
+use crate::bench::{BenchSummary, BenchTask};
+use crate::bench_info::BenchInfo;
+use crate::bencher::{AsyncBencher, Bencher, SyncBencher};
 use crate::tamer::BenchmarkFilter;
 
 pub struct Group {
     pub(crate) name: String,
     output_dir: Option<PathBuf>,
     parameters_names: Vec<String>,
-    benchers: Vec<Bencher>,
-    benches: Vec<Bench>,
+    benchers: Vec<BenchTask>,
+    benches: Vec<BenchSummary>,
     did_report: bool,
 }
 
@@ -33,81 +34,46 @@ impl Group {
         self
     }
 
-    pub fn async_bench<O, R: Future<Output = O>, F: FnOnce() -> R + 'static>(
+    pub fn bench<F: FnOnce(SyncBencher) -> Duration + 'static>(
         &mut self,
-        id: impl ToString,
-        throughput: Throughput,
-        params: Vec<String>,
+        bench_info: BenchInfo,
         f: F,
     ) {
-        let id = id.to_string();
-        assert_eq!(params.len(), self.parameters_names.len());
-        let bencher = Bencher {
-            id: id.clone(),
+        assert_eq!(bench_info.params.len(), self.parameters_names.len());
+        let bench_task = BenchTask {
+            bench_info: bench_info.clone(),
             benchmark_function: Box::new(move || {
-                let runner = Runtime::new().unwrap();
-
-                let bench = runner.block_on(async {
-                    let start = std::time::Instant::now();
-                    let r = f().await;
-                    drop(r); // include drop time in the benchmark
-                    let elapsed_time = start.elapsed();
-                    Bench {
-                        id,
-                        throughput,
-                        elapsed_time,
-                        params,
-                    }
-                });
-                bench
-            }),
+                BenchSummary::new(bench_info, f(SyncBencher::new()))
+            })
         };
-        self.benchers.push(bencher);
+        self.benchers.push(bench_task);
     }
 
-    pub fn async_bench_with_input<I, FI: FnOnce() -> I + 'static, O, R: Future<Output = O>, F: FnOnce(I) -> R + 'static>(
+    pub fn bench_with_input<I: 'static, FI: FnOnce() -> I + 'static, F: FnOnce(SyncBencher, I) -> Duration + 'static>(
         &mut self,
-        id: impl ToString,
+        bench_info: BenchInfo,
         input_function: FI,
-        throughput: Throughput,
-        params: Vec<String>,
         f: F,
     ) {
-        let id = id.to_string();
-        assert_eq!(params.len(), self.parameters_names.len());
-        let bencher = Bencher {
-            id: id.clone(),
+        assert_eq!(bench_info.params.len(), self.parameters_names.len());
+        self.benchers.push(BenchTask {
+            bench_info: bench_info.clone(),
             benchmark_function: Box::new(move || {
                 let input = (input_function)();
-                let runner = Runtime::new().unwrap();
-
-                let bench = runner.block_on(async {
-                    let start = std::time::Instant::now();
-                    let r = f(input).await;
-                    drop(r); // include drop time in the benchmark
-                    let elapsed_time = start.elapsed();
-                    Bench {
-                        id,
-                        throughput,
-                        elapsed_time,
-                        params,
-                    }
-                });
-                bench
-            }),
-        };
-        self.benchers.push(bencher);
+                BenchSummary::new(bench_info, f(SyncBencher::new(), input))
+            })
+        });
     }
 
     pub(crate) fn benchmark(&mut self, filter: &BenchmarkFilter) {
         let benchers = std::mem::replace(&mut self.benchers, Vec::new());
-        let filtered_benchers: Vec<_> = benchers.into_iter().filter(|b| filter.filter_matches(&format!("{}/{}", self.name, b.id))).collect();
+        let filtered_benchers: Vec<_> = benchers.into_iter().filter(|b| filter.filter_matches(&format!("{}/{}", self.name, b.bench_info.id))).collect();
         if filtered_benchers.is_empty() {
             return;
         }
         println!("Running group {}:", self.name);
         for bencher in filtered_benchers {
-            println!("\t{}:", bencher.id);
+            println!("\t{}:", bencher.bench_info.id);
             let bench = (bencher.benchmark_function)();
             let bench_display = format!("{}", bench);
             let bench_display = bench_display.replace("\n", "\n\t\t");
@@ -136,11 +102,11 @@ impl Group {
             writer.write_record(&headers).unwrap();
             for bench in self.benches.iter() {
                 let mut values = vec![
-                    bench.id.clone(),
+                    bench.bench_info.id.clone(),
                     bench.elapsed_time.as_millis().to_string(),
-                    bench.throughput.value().to_string(),
+                    bench.bench_info.throughput.value().to_string(),
                 ];
-                for p in bench.params.clone().into_iter() {
+                for p in bench.bench_info.params.clone().into_iter() {
                     values.push(p);
                 }
                 writer
