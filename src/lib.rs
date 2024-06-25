@@ -1,6 +1,6 @@
 pub mod tamer;
 pub mod throughput;
-mod group;
+pub mod group;
 mod bench;
 mod utils;
 mod measurement;
